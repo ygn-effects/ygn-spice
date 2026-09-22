@@ -3,7 +3,10 @@
 #include "commands.hpp"
 #include "document.hpp"
 
+#include <cstddef>
 #include <memory>
+#include <optional>
+#include <vector>
 
 namespace ygn::spice::core {
 
@@ -18,11 +21,12 @@ public:
   bool undo();
   bool redo();
 
-  bool mark_saved() const;
+  void mark_saved();
   bool is_dirty() const;
 
 private:
   Document &document_;
+  std::optional<std::size_t> saved_cursor_;
   std::size_t cursor_;
   std::vector<std::unique_ptr<Command>> history_;
 };

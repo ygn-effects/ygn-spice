@@ -1,7 +1,7 @@
 #include "history.hpp"
 
 namespace ygn::spice::core {
-CommandHistory::CommandHistory(Document &doc) : document_(doc), cursor_(0) {
+CommandHistory::CommandHistory(Document &doc) : document_(doc), saved_cursor_(0), cursor_(0) {
 }
 
 bool CommandHistory::can_redo() const {
@@ -14,6 +14,10 @@ bool CommandHistory::can_undo() const {
 
 bool CommandHistory::execute(std::unique_ptr<Command> cmd) {
   if (cmd->execute(document_)) {
+    if (saved_cursor_ > cursor_) {
+      saved_cursor_ = std::nullopt;
+    }
+
     cursor_++;
 
     history_.resize(cursor_);
@@ -50,10 +54,10 @@ bool CommandHistory::redo() {
 }
 
 bool CommandHistory::is_dirty() const {
-  return false;
+  return !saved_cursor_.has_value() || saved_cursor_ != cursor_;
 }
 
-bool CommandHistory::mark_saved() const {
-  return false;
+void CommandHistory::mark_saved() {
+  saved_cursor_ = cursor_;
 }
 } // namespace ygn::spice::core
