@@ -9,6 +9,7 @@ core_library = static_library(
   'src/connectivity.cpp',
   'src/commands.cpp',
   'src/history.cpp',
+  'src/command_group.cpp',
   include_directories: core_inc,
   dependencies: uuid_dep,
 )
