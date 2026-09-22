@@ -1,0 +1,7 @@
+option(
+  'ngspice',
+  type: 'feature',
+  value: 'auto',
+  description: 'Enable the ngspice shared-library backend when available',
+)
+
