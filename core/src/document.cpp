@@ -1,6 +1,21 @@
 #include "document.hpp"
 
 namespace ygn::spice::core {
+
+namespace {
+template <typename Collection>
+auto find_by_id(Collection &objects, const Uuid &id) {
+  return std::ranges::find(objects, id, [](const auto &object) {
+    return object.id();
+  });
+}
+
+template <typename Collection>
+bool contains_id(const Collection &objects, const Uuid &id) {
+  return find_by_id(objects, id) != objects.end();
+}
+} // namespace
+
 bool operator==(const Point &lhs, const Point &rhs) {
   return lhs.x == rhs.x && lhs.y == rhs.y;
 }

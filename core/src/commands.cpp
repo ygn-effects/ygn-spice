@@ -1,5 +1,7 @@
 #include "commands.hpp"
 
+#include <stdexcept>
+
 namespace ygn::spice::core {
 
 CommandResult CommandResult::completed() {

@@ -309,19 +309,4 @@ bool segment_edges_contains_point(const Segment &s, const Point &p) {
   return (s[0].x == p.x && s[0].y == p.y) || (s[1].x == p.x && s[1].y == p.y);
 }
 
-std::vector<size_t>
-adjacent_participants(const std::vector<std::vector<size_t>> &adjacency, size_t participant) {
-  std::vector<size_t> vec;
-  size_t j = 0;
-
-  for (auto &a : adjacency) {
-    if (find(a.begin(), a.end(), participant) != a.end()) {
-      vec.push_back(j);
-    }
-
-    j++;
-  }
-
-  return vec;
-}
 } // namespace ygn::spice::core

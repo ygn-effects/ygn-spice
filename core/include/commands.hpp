@@ -5,7 +5,6 @@
 
 #include <format>
 #include <optional>
-#include <stdexcept>
 #include <string>
 
 namespace ygn::spice::core {
