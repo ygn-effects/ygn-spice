@@ -13,10 +13,11 @@ namespace ygn::spice::core {
 struct Point {
   Coordinate x;
   Coordinate y;
+
+  friend auto operator<=>(const Point &self, const Point &other) = default;
 };
 
 using Segment = std::array<Point, 2>;
-bool operator==(const Point &lhs, const Point &rhs);
 
 class ComponentInstance {
 public:

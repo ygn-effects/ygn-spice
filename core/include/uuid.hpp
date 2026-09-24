@@ -19,8 +19,7 @@ public:
   std::string to_string() const;
   bool is_nil() const;
 
-  bool operator<(const Uuid &other) const;
-  friend bool operator==(const Uuid &self, const Uuid &other);
+  friend auto operator<=>(const Uuid &self, const Uuid &other) = default;
 
 private:
   Uuid();

@@ -68,23 +68,4 @@ bool Coordinate::is_overflow(const rep &a, const rep &b) {
   return false;
 }
 
-bool operator==(const Coordinate &self, const Coordinate &other) {
-  return self.rep_ == other.rep_;
-}
-
-bool operator<(const Coordinate &self, const Coordinate &other) {
-  return self.rep_ < other.rep_;
-}
-
-bool operator>(const Coordinate &self, const Coordinate &other) {
-  return operator<(other, self);
-}
-
-bool operator<=(const Coordinate &self, const Coordinate &other) {
-  return !(operator>(self, other));
-}
-
-bool operator>=(const Coordinate &self, const Coordinate &other) {
-  return !(operator<(self, other));
-}
 } // namespace ygn::spice::core

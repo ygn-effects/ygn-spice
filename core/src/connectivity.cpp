@@ -25,23 +25,6 @@ const ConnectionKind &ConnectionRef::kind() const {
   return kind_;
 }
 
-bool ConnectionRef::operator<(const ConnectionRef &other) const {
-  if (this->kind_ == other.kind_) {
-    if (this->primary_id_ == other.primary_id_) {
-      return this->secondary_id_ < other.secondary_id_;
-    } else {
-      return this->primary_id_ < other.primary_id_;
-    }
-  } else {
-    return this->kind_ < other.kind_;
-  }
-}
-
-bool operator==(const ConnectionRef &self, const ConnectionRef &other) {
-  return self.primary_id_ == other.primary_id_ && self.kind_ == other.kind_ &&
-    self.secondary_id_ == other.secondary_id_;
-}
-
 bool operator!=(const ConnectionRef &self, const ConnectionRef &other) {
   return !(operator==(self, other));
 }
@@ -64,29 +47,6 @@ void Net::insert_ref(ConnectionRef ref) {
 
 void Net::sort_refs() {
   std::sort(connections_.begin(), connections_.end());
-}
-
-bool Net::operator<(const Net &other) const {
-  std::size_t s = std::min(this->connections_.size(), other.connections_.size());
-
-  for (std::size_t i = 0; i < s; i++) {
-    if (this->connections_[i] != other.connections_[i]) {
-      return this->connections_[i] < other.connections_[i];
-    }
-  }
-
-  return this->connections_.size() < other.connections_.size();
-}
-
-bool operator==(const Net &self, const Net &other) {
-  if (self.connections_.size() == other.connections_.size()) {
-    return std::equal(
-      self.connections_.begin(),
-      self.connections_.end(),
-      other.connections_.begin());
-  }
-
-  return false;
 }
 
 bool Connectivity::are_connected(const ConnectionRef &ref1, const ConnectionRef &ref2) const {

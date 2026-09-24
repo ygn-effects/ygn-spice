@@ -16,10 +16,6 @@ bool contains_id(const Collection &objects, const Uuid &id) {
 }
 } // namespace
 
-bool operator==(const Point &lhs, const Point &rhs) {
-  return lhs.x == rhs.x && lhs.y == rhs.y;
-}
-
 ComponentInstance::ComponentInstance(Uuid id, std::string designator, Point position)
     : id_(id), designator_(designator), position_(position) {
 }

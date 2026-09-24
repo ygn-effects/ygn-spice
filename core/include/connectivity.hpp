@@ -21,9 +21,7 @@ public:
 
   const ConnectionKind &kind() const;
 
-  bool operator<(const ConnectionRef &other) const;
-  friend bool operator==(const ConnectionRef &self, const ConnectionRef &other);
-  friend bool operator!=(const ConnectionRef &self, const ConnectionRef &other);
+  friend auto operator<=>(const ConnectionRef &self, const ConnectionRef &other) = default;
 
 private:
   ConnectionRef(ConnectionKind kind, Uuid p_id, std::optional<Uuid> s_id = std::nullopt);
@@ -51,8 +49,7 @@ public:
 
   bool contains_ref(const ConnectionRef &ref) const;
 
-  bool operator<(const Net &other) const;
-  friend bool operator==(const Net &self, const Net &other);
+  friend auto operator<=>(const Net &self, const Net &other) = default;
 
 private:
   std::vector<ConnectionRef> connections_;

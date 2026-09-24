@@ -58,11 +58,4 @@ Uuid::Uuid() {
   std::memset(uuid_, 0, sizeof(uuid_));
 }
 
-bool Uuid::operator<(const Uuid &other) const {
-  return std::memcmp(this->uuid_, other.uuid_, sizeof(this->uuid_)) < 0;
-}
-
-bool operator==(const Uuid &self, const Uuid &other) {
-  return std::memcmp(self.uuid_, other.uuid_, sizeof(uuid_t)) == 0;
-}
 } // namespace ygn::spice::core

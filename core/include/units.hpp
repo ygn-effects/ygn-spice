@@ -6,13 +6,9 @@ namespace ygn::spice::core {
 
 class Coordinate {
 public:
-  typedef int64_t rep;
+  using rep = int64_t;
 
-  friend bool operator==(const Coordinate &self, const Coordinate &other);
-  friend bool operator<(const Coordinate &self, const Coordinate &other);
-  friend bool operator>(const Coordinate &self, const Coordinate &other);
-  friend bool operator<=(const Coordinate &self, const Coordinate &other);
-  friend bool operator>=(const Coordinate &self, const Coordinate &other);
+  friend auto operator<=>(const Coordinate &self, const Coordinate &other) = default;
 
   static Coordinate from_millimetres(const rep r);
   static Coordinate from_micrometres(const rep r);
