@@ -39,14 +39,14 @@ const Point &ComponentInstance::position() const noexcept {
 }
 
 void ComponentInstance::set_designator(std::string designator) {
-  designator_ = designator;
+  designator_ = std::move(designator);
 }
 
-Wire::Wire(Uuid id, Segment points) : id_(id), points_(points) {
+Wire::Wire(Uuid id, Segment points) : id_(std::move(id)), points_(std::move(points)) {
 }
 
 Wire Wire::create(Segment points) {
-  Wire wire(Uuid::random(), points);
+  Wire wire(Uuid::random(), std::move(points));
 
   return wire;
 }
@@ -59,11 +59,11 @@ const Segment &Wire::points() const noexcept {
   return points_;
 }
 
-Junction::Junction(Uuid id, Point position) : id_(id), position_(position) {
+Junction::Junction(Uuid id, Point position) : id_(std::move(id)), position_(std::move(position)) {
 }
 
 Junction Junction::create(Point position) {
-  Junction junction(Uuid::random(), position);
+  Junction junction(Uuid::random(), std::move(position));
 
   return junction;
 }
@@ -77,11 +77,11 @@ const Point &Junction::position() const noexcept {
 }
 
 NetLabel::NetLabel(Uuid id, std::string text, Point position)
-    : id_(id), text_(text), position_(position) {
+    : id_(std::move(id)), text_(std::move(text)), position_(std::move(position)) {
 }
 
 NetLabel NetLabel::create(std::string text, Point position) {
-  NetLabel label(Uuid::random(), text, position);
+  NetLabel label(Uuid::random(), std::move(text), std::move(position));
 
   return label;
 }
@@ -99,11 +99,11 @@ const Point &NetLabel::position() const noexcept {
 }
 
 Directive::Directive(Uuid id, std::string text, Point position)
-    : id_(id), text_(text), position_(position) {
+    : id_(std::move(id)), text_(std::move(text)), position_(std::move(position)) {
 }
 
 Directive Directive::create(std::string text, Point position) {
-  Directive direct(Uuid::random(), text, position);
+  Directive direct(Uuid::random(), std::move(text), std::move(position));
 
   return direct;
 }
@@ -120,11 +120,11 @@ const Point &Directive::position() const noexcept {
   return position_;
 }
 
-Probe::Probe(Uuid id, ProbeKind kind) : id_(id), kind_(kind) {
+Probe::Probe(Uuid id, ProbeKind kind) : id_(std::move(id)), kind_(std::move(kind)) {
 }
 
 Probe Probe::create(ProbeKind kind) {
-  Probe probe(Uuid::random(), kind);
+  Probe probe(Uuid::random(), std::move(kind));
 
   return probe;
 }
@@ -137,11 +137,12 @@ const ProbeKind &Probe::kind() const noexcept {
   return kind_;
 }
 
-AnalysisSetup::AnalysisSetup(Uuid id, std::string name) : id_(id), name_(name) {
+AnalysisSetup::AnalysisSetup(Uuid id, std::string name)
+    : id_(std::move(id)), name_(std::move(name)) {
 }
 
 AnalysisSetup AnalysisSetup::create(std::string name) {
-  AnalysisSetup analysis(Uuid::random(), name);
+  AnalysisSetup analysis(Uuid::random(), std::move(name));
 
   return analysis;
 }
@@ -358,7 +359,7 @@ bool Document::add_analysis(AnalysisSetup analysis) {
     return false;
   }
 
-  analyses_.push_back(analysis);
+  analyses_.push_back(std::move(analysis));
   return true;
 }
 
@@ -427,7 +428,7 @@ bool Sheet::add_component(ComponentInstance component) {
     return false;
   }
 
-  components_.push_back(component);
+  components_.push_back(std::move(component));
   return true;
 }
 
@@ -462,7 +463,7 @@ bool Sheet::add_wire(Wire wire) {
     return false;
   }
 
-  wires_.push_back(wire);
+  wires_.push_back(std::move(wire));
   return true;
 }
 
@@ -486,7 +487,7 @@ bool Sheet::add_junction(Junction junction) {
     return false;
   }
 
-  junctions_.push_back(junction);
+  junctions_.push_back(std::move(junction));
   return true;
 }
 
@@ -510,7 +511,7 @@ bool Sheet::add_label(NetLabel label) {
     return false;
   }
 
-  labels_.push_back(label);
+  labels_.push_back(std::move(label));
   return true;
 }
 
@@ -534,7 +535,7 @@ bool Sheet::add_directive(Directive directive) {
     return false;
   }
 
-  directives_.push_back(directive);
+  directives_.push_back(std::move(directive));
   return true;
 }
 
@@ -558,7 +559,7 @@ bool Sheet::add_probe(Probe probe) {
     return false;
   }
 
-  probes_.push_back(probe);
+  probes_.push_back(std::move(probe));
   return true;
 }
 

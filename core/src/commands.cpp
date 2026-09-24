@@ -21,14 +21,14 @@ std::optional<CommandReason> CommandResult::reason() const {
 }
 
 CommandResult::CommandResult(CommandOutcome outcome, std::optional<CommandReason> reason)
-    : outcome_(std::move(outcome)), reason_(std::move(reason)) {
+    : outcome_(outcome), reason_(reason) {
 }
 
 CommandResult::operator bool() const {
   return outcome_ == CommandOutcome::Completed;
 }
 
-RenameComponentCommand::RenameComponentCommand(const Uuid id, const std::string new_name)
+RenameComponentCommand::RenameComponentCommand(Uuid id, std::string new_name)
     : id_(id), new_name_(new_name) {
 }
 
@@ -49,7 +49,7 @@ CommandResult RenameComponentCommand::execute(Document &doc) {
     return CommandResult::unchanged(CommandReason::NotFound);
   }
 
-  name_ = name;
+  name_ = std::move(name);
 
   return CommandResult::completed();
 }

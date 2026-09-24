@@ -38,7 +38,7 @@ public:
 
 class RenameComponentCommand : public Command {
 public:
-  RenameComponentCommand(const Uuid id, const std::string new_name);
+  RenameComponentCommand(Uuid id, std::string new_name);
 
   CommandResult execute(Document &doc) override;
   void undo(Document &doc) override;
