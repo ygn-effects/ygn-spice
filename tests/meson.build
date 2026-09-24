@@ -6,6 +6,7 @@ core_test_sources = files(
   'core/test_document.cpp',
   'core/test_commands.cpp',
   'core/test_command_group.cpp',
+  'core/test_command_group_history.cpp',
   'core/test_history.cpp',
   'core/test_connectivity.cpp',
 )
