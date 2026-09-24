@@ -17,7 +17,7 @@ public:
   bool can_undo() const;
   bool can_redo() const;
 
-  bool execute(std::unique_ptr<Command> cmd);
+  CommandResult execute(std::unique_ptr<Command> cmd);
   bool undo();
   bool redo();
 

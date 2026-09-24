@@ -13,8 +13,8 @@ class CommandGroup : public Command {
 public:
   CommandGroup(std::vector<std::unique_ptr<Command>> commands);
 
-  bool execute(Document &doc) override;
-  bool undo(Document &doc) override;
+  CommandResult execute(Document &doc) override;
+  void undo(Document &doc) override;
 
 private:
   std::vector<std::unique_ptr<Command>> commands_;

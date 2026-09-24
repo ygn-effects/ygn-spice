@@ -3,14 +3,36 @@
 #include "document.hpp"
 #include "uuid.hpp"
 
+#include <format>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 namespace ygn::spice::core {
+enum class CommandOutcome { Completed, Unchanged };
+enum class CommandReason { NotFound, AlreadyExists, NoChangeNeeded };
+
+struct CommandResult {
+public:
+  static CommandResult completed();
+  static CommandResult unchanged(std::optional<CommandReason> reason);
+
+  CommandOutcome outcome() const;
+  std::optional<CommandReason> reason() const;
+
+  explicit operator bool() const;
+
+private:
+  CommandResult(CommandOutcome outcome, std::optional<CommandReason> reason);
+
+  CommandOutcome outcome_;
+  std::optional<CommandReason> reason_;
+};
+
 class Command {
 public:
-  virtual bool execute(Document &doc) = 0;
-  virtual bool undo(Document &doc) = 0;
+  virtual CommandResult execute(Document &doc) = 0;
+  virtual void undo(Document &doc) = 0;
 
   virtual ~Command() = default;
 };
@@ -19,8 +41,8 @@ class RenameComponentCommand : public Command {
 public:
   RenameComponentCommand(const Uuid id, const std::string new_name);
 
-  bool execute(Document &doc) override;
-  bool undo(Document &doc) override;
+  CommandResult execute(Document &doc) override;
+  void undo(Document &doc) override;
 
 private:
   const Uuid id_;

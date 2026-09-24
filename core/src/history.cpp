@@ -12,45 +12,46 @@ bool CommandHistory::can_undo() const {
   return cursor_ > 0;
 }
 
-bool CommandHistory::execute(std::unique_ptr<Command> cmd) {
-  if (cmd->execute(document_)) {
+CommandResult CommandHistory::execute(std::unique_ptr<Command> cmd) {
+  if (CommandResult r = cmd->execute(document_)) {
     if (saved_cursor_ > cursor_) {
       saved_cursor_ = std::nullopt;
     }
 
     cursor_++;
 
-    history_.resize(cursor_);
-    history_.at(cursor_ - 1) = std::move(cmd);
+    history_.erase(history_.begin() + cursor_ - 1, history_.end());
+    history_.push_back(std::move(cmd));
 
-    return true;
+    return r;
+  } else {
+    return r;
   }
-
-  return false;
 }
 
 bool CommandHistory::undo() {
-  if (can_undo()) {
-    if (history_.at(cursor_ - 1)->undo(document_)) {
-      cursor_--;
-
-      return true;
-    }
+  if (!can_undo()) {
+    return false;
   }
 
-  return false;
+  history_.at(cursor_ - 1)->undo(document_);
+  cursor_--;
+
+  return true;
 }
 
 bool CommandHistory::redo() {
-  if (can_redo()) {
-    if (history_.at(cursor_)->execute(document_)) {
-      cursor_++;
-
-      return true;
-    }
+  if (!can_redo()) {
+    return false;
   }
 
-  return false;
+  if (history_.at(cursor_)->execute(document_)) {
+    cursor_++;
+
+    return true;
+  } else {
+    throw std::logic_error("Error replaying history.");
+  }
 }
 
 bool CommandHistory::is_dirty() const {

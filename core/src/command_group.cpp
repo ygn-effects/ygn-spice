@@ -6,38 +6,42 @@ CommandGroup::CommandGroup(std::vector<std::unique_ptr<Command>> commands)
     : commands_(std::move(commands)), exec_(0) {
 }
 
-bool CommandGroup::execute(Document &doc) {
+CommandResult CommandGroup::execute(Document &doc) {
   if (commands_.size() == 0) {
-    return false;
+    return CommandResult::unchanged(CommandReason::NoChangeNeeded);
   }
 
-  for (std::size_t i = exec_; i < commands_.size(); i++) {
-    if (!commands_.at(i)->execute(doc)) {
-      undo(doc);
+  exec_ = 0;
 
-      return false;
+  for (std::size_t i = exec_; i < commands_.size(); i++) {
+    CommandResult e = commands_.at(i)->execute(doc);
+
+    if (e.outcome() == CommandOutcome::Unchanged) {
+      if (exec_ == 0) {
+        return e;
+      } else {
+        undo(doc);
+
+        return e;
+      }
     }
 
     exec_++;
   }
 
-  return true;
+  return CommandResult::completed();
 }
 
-bool CommandGroup::undo(Document &doc) {
+void CommandGroup::undo(Document &doc) {
   if (exec_ == 0) {
-    return false;
+    throw std::logic_error("Nothing to undo");
   }
 
   for (std::size_t i = exec_; i > 0; i--) {
-    if (!commands_.at(i - 1)->undo(doc)) {
-      return false;
-    }
+    commands_.at(i - 1)->undo(doc);
 
     exec_--;
   }
-
-  return true;
 }
 
 } // namespace ygn::spice::core

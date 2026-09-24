@@ -1,52 +1,37 @@
 // Keep the public header first so this test also verifies that it is self-contained.
 #include "history.hpp"
 
+#include "command_test_support.hpp"
 #include "commands.hpp"
 #include "document.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 
 namespace {
 
 using namespace ygn::spice::core;
+using namespace ygn::spice::core::test;
 
-struct RenameControl {
-  bool allow_execute = true;
-  bool allow_undo = true;
-  int execute_calls = 0;
-  int undo_calls = 0;
-};
+// History is bound to one document, which outlives it, and owns the commands it
+// accepts. execute returns the command's own result, and a rejected command
+// never enters the history. undo and redo return false only when there is
+// nothing to undo or redo; anything else going wrong is a broken invariant that
+// throws std::logic_error. These tests exercise observable behavior without
+// prescribing stacks or a vector/cursor internally.
+static_assert(
+  std::is_same_v<
+    decltype(std::declval<CommandHistory &>().execute(std::declval<std::unique_ptr<Command>>())),
+    CommandResult>);
+static_assert(std::is_same_v<decltype(std::declval<CommandHistory &>().undo()), bool>);
+static_assert(std::is_same_v<decltype(std::declval<CommandHistory &>().redo()), bool>);
 
-// Inject a recoverable failure without changing the document outside history.
-// Successful calls still perform a real rename and its inverse.
-class ControlledRename final : public Command {
-public:
-  ControlledRename(const Uuid &id, const std::string &name, std::shared_ptr<RenameControl> control)
-      : rename_(id, name), control_(control) {
-  }
-
-  bool execute(Document &document) override {
-    ++control_->execute_calls;
-    return control_->allow_execute && rename_.execute(document);
-  }
-
-  bool undo(Document &document) override {
-    ++control_->undo_calls;
-    return control_->allow_undo && rename_.undo(document);
-  }
-
-private:
-  RenameComponentCommand rename_;
-  std::shared_ptr<RenameControl> control_;
-};
-
-// History is bound to one document, which outlives it. It owns submitted commands.
-// execute/undo/redo return true only when an edit succeeds. These tests exercise
-// observable behavior without prescribing stacks or a vector/cursor internally.
 struct HistoryFixture {
   Document document;
   Uuid document_id = document.id();
@@ -62,14 +47,11 @@ struct HistoryFixture {
     REQUIRE(document.add_component(sheet_id, other));
   }
 
-  bool rename(const Uuid &id, std::string name) {
-    return history.execute(std::make_unique<RenameComponentCommand>(id, name));
+  CommandResult rename(const Uuid &id, std::string name) {
+    return history.execute(rename_command(id, std::move(name)));
   }
 
-  void check_state(
-    std::string_view target_name, std::string_view other_name, bool can_undo, bool can_redo) const {
-    CHECK(history.can_undo() == can_undo);
-    CHECK(history.can_redo() == can_redo);
+  void check_names(std::string_view target_name, std::string_view other_name) const {
     CHECK(document.id() == document_id);
     REQUIRE(document.sheets().size() == 1);
     CHECK(document.sheets().front().id() == sheet_id);
@@ -77,15 +59,20 @@ struct HistoryFixture {
 
     const auto *actual_target = document.lookup(target.id());
     REQUIRE(actual_target != nullptr);
-    CHECK(actual_target->id() == target.id());
     CHECK(actual_target->position() == target.position());
     CHECK(actual_target->designator() == target_name);
 
     const auto *actual_other = document.lookup(other.id());
     REQUIRE(actual_other != nullptr);
-    CHECK(actual_other->id() == other.id());
     CHECK(actual_other->position() == other.position());
     CHECK(actual_other->designator() == other_name);
+  }
+
+  void check_state(
+    std::string_view target_name, std::string_view other_name, bool can_undo, bool can_redo) const {
+    CHECK(history.can_undo() == can_undo);
+    CHECK(history.can_redo() == can_redo);
+    check_names(target_name, other_name);
   }
 };
 
@@ -97,7 +84,7 @@ TEST_CASE("empty history cannot undo or redo", "[history]") {
   fixture.check_state("R1", "R9", false, false);
 
   // Boundary attempts must not prevent the first real edit.
-  REQUIRE(fixture.rename(fixture.target.id(), "R2"));
+  check_result(fixture.rename(fixture.target.id(), "R2"), CommandOutcome::Completed);
   fixture.check_state("R2", "R9", true, false);
 }
 
@@ -141,7 +128,7 @@ TEST_CASE("history undoes newest edits first and redoes them in execution order"
   fixture.check_state("R3", "R8", true, false);
 }
 
-TEST_CASE("a successful new edit replaces the entire redo branch", "[history]") {
+TEST_CASE("a new edit replaces the entire redo branch", "[history]") {
   HistoryFixture fixture;
   REQUIRE(fixture.rename(fixture.target.id(), "R2")); // A
   REQUIRE(fixture.rename(fixture.other.id(), "R8"));  // B
@@ -167,15 +154,21 @@ TEST_CASE("a successful new edit replaces the entire redo branch", "[history]") 
   fixture.check_state("R4", "R9", true, false);
 }
 
-TEST_CASE("unsuccessful edits do not enter an empty history", "[history]") {
+TEST_CASE("rejected edits report their reason and stay out of an empty history", "[history]") {
   HistoryFixture fixture;
 
   SECTION("missing component") {
     const auto absent = ComponentInstance::create("R0", fixture.target.position());
-    CHECK_FALSE(fixture.rename(absent.id(), "R7"));
+    check_result(
+      fixture.rename(absent.id(), "R7"),
+      CommandOutcome::Unchanged,
+      CommandReason::NotFound);
   }
   SECTION("unchanged name") {
-    CHECK_FALSE(fixture.rename(fixture.target.id(), "R1"));
+    check_result(
+      fixture.rename(fixture.target.id(), "R1"),
+      CommandOutcome::Unchanged,
+      CommandReason::NoChangeNeeded);
   }
 
   fixture.check_state("R1", "R9", false, false);
@@ -186,7 +179,7 @@ TEST_CASE("unsuccessful edits do not enter an empty history", "[history]") {
   fixture.check_state("R1", "R9", false, true);
 }
 
-TEST_CASE("unsuccessful new edits preserve both undo and redo history", "[history]") {
+TEST_CASE("rejected new edits preserve both undo and redo history", "[history]") {
   HistoryFixture fixture;
   REQUIRE(fixture.rename(fixture.target.id(), "R2"));
   REQUIRE(fixture.rename(fixture.target.id(), "R3"));
@@ -195,81 +188,22 @@ TEST_CASE("unsuccessful new edits preserve both undo and redo history", "[histor
 
   SECTION("missing component") {
     const auto absent = ComponentInstance::create("R0", fixture.target.position());
-    CHECK_FALSE(fixture.rename(absent.id(), "R7"));
+    check_result(
+      fixture.rename(absent.id(), "R7"),
+      CommandOutcome::Unchanged,
+      CommandReason::NotFound);
   }
   SECTION("unchanged name") {
-    CHECK_FALSE(fixture.rename(fixture.target.id(), "R2"));
+    check_result(
+      fixture.rename(fixture.target.id(), "R2"),
+      CommandOutcome::Unchanged,
+      CommandReason::NoChangeNeeded);
   }
 
   fixture.check_state("R2", "R9", true, true);
   REQUIRE(fixture.history.redo());
   fixture.check_state("R3", "R9", true, false);
   REQUIRE(fixture.history.undo());
-  fixture.check_state("R2", "R9", true, true);
-  REQUIRE(fixture.history.undo());
-  fixture.check_state("R1", "R9", false, true);
-}
-
-TEST_CASE("failed undo preserves history and retries the same command", "[history][failure]") {
-  HistoryFixture fixture;
-  const auto control = std::make_shared<RenameControl>();
-  REQUIRE(fixture.rename(fixture.target.id(), "R2")); // A
-  REQUIRE(fixture.history.execute(
-    std::make_unique<ControlledRename>(fixture.other.id(), "R8", control))); // B
-  REQUIRE(fixture.rename(fixture.target.id(), "R3"));                        // C
-  REQUIRE(fixture.history.undo()); // Leave C available to redo.
-  fixture.check_state("R2", "R8", true, true);
-
-  control->allow_undo = false;
-  CHECK_FALSE(fixture.history.undo());
-  CHECK(control->undo_calls == 1);
-  fixture.check_state("R2", "R8", true, true);
-
-  control->allow_undo = true;
-  REQUIRE(fixture.history.undo());
-  CHECK(control->undo_calls == 2);
-  fixture.check_state("R2", "R9", true, true);
-  REQUIRE(fixture.history.undo());
-  fixture.check_state("R1", "R9", false, true);
-
-  // A, B and the pre-existing redo entry C must all remain usable.
-  REQUIRE(fixture.history.redo());
-  fixture.check_state("R2", "R9", true, true);
-  REQUIRE(fixture.history.redo());
-  CHECK(control->execute_calls == 2);
-  fixture.check_state("R2", "R8", true, true);
-  REQUIRE(fixture.history.redo());
-  fixture.check_state("R3", "R8", true, false);
-}
-
-TEST_CASE("failed redo preserves history and retries the same command", "[history][failure]") {
-  HistoryFixture fixture;
-  const auto control = std::make_shared<RenameControl>();
-  REQUIRE(fixture.rename(fixture.target.id(), "R2")); // A
-  REQUIRE(fixture.history.execute(
-    std::make_unique<ControlledRename>(fixture.other.id(), "R8", control))); // B
-  REQUIRE(fixture.rename(fixture.target.id(), "R3"));                        // C
-  REQUIRE(fixture.history.undo());
-  REQUIRE(fixture.history.undo());
-  fixture.check_state("R2", "R9", true, true);
-
-  control->allow_execute = false;
-  CHECK_FALSE(fixture.history.redo());
-  CHECK(control->execute_calls == 2); // Initial execution plus failed redo.
-  fixture.check_state("R2", "R9", true, true);
-
-  control->allow_execute = true;
-  REQUIRE(fixture.history.redo());
-  CHECK(control->execute_calls == 3);
-  fixture.check_state("R2", "R8", true, true);
-  REQUIRE(fixture.history.redo());
-  fixture.check_state("R3", "R8", true, false);
-
-  // The applied prefix and both redo entries must survive the failure.
-  REQUIRE(fixture.history.undo());
-  fixture.check_state("R2", "R8", true, true);
-  REQUIRE(fixture.history.undo());
-  CHECK(control->undo_calls == 2);
   fixture.check_state("R2", "R9", true, true);
   REQUIRE(fixture.history.undo());
   fixture.check_state("R1", "R9", false, true);
@@ -382,9 +316,15 @@ TEST_CASE(
     }
     const auto current_name = start_dirty ? "R1" : "R2";
     const auto absent = ComponentInstance::create("R0", fixture.target.position());
-    CHECK_FALSE(fixture.rename(absent.id(), "R7"));
+    check_result(
+      fixture.rename(absent.id(), "R7"),
+      CommandOutcome::Unchanged,
+      CommandReason::NotFound);
     CHECK(fixture.history.is_dirty() == start_dirty);
-    CHECK_FALSE(fixture.rename(fixture.target.id(), current_name));
+    check_result(
+      fixture.rename(fixture.target.id(), current_name),
+      CommandOutcome::Unchanged,
+      CommandReason::NoChangeNeeded);
     CHECK(fixture.history.is_dirty() == start_dirty);
     fixture.check_state(current_name, "R9", !start_dirty, start_dirty);
 
@@ -400,50 +340,29 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "failed undo preserves clean and dirty states until a successful retry",
-  "[history][dirty][failure]") {
-  for (const bool save_after_edit : {false, true}) {
-    CAPTURE(save_after_edit);
-    HistoryFixture fixture;
-    fixture.history.mark_saved();
-    const auto control = std::make_shared<RenameControl>();
-    REQUIRE(fixture.history.execute(
-      std::make_unique<ControlledRename>(fixture.target.id(), "R2", control)));
-    if (save_after_edit) {
-      fixture.history.mark_saved();
-    }
-    control->allow_undo = false;
-    CHECK_FALSE(fixture.history.undo());
-    CHECK(fixture.history.is_dirty() == !save_after_edit);
-    fixture.check_state("R2", "R9", true, false);
-    control->allow_undo = true;
-    REQUIRE(fixture.history.undo());
-    CHECK(fixture.history.is_dirty() == save_after_edit);
-  }
-}
+// Undo and redo cannot fail while the history is the only writer of the
+// document. These cases break that rule on purpose and only check that the
+// history fails loudly instead of trying to recover.
+TEST_CASE("broken invariants fail loudly instead of being recovered", "[history][contract]") {
+  HistoryFixture fixture;
 
-TEST_CASE(
-  "failed redo preserves clean and dirty states until a successful retry",
-  "[history][dirty][failure]") {
-  for (const bool save_after_edit : {false, true}) {
-    CAPTURE(save_after_edit);
-    HistoryFixture fixture;
-    fixture.history.mark_saved();
-    const auto control = std::make_shared<RenameControl>();
-    REQUIRE(fixture.history.execute(
-      std::make_unique<ControlledRename>(fixture.target.id(), "R2", control)));
-    if (save_after_edit) {
-      fixture.history.mark_saved();
-    }
+  SECTION("a redo that its command now rejects") {
+    const auto trace = std::make_shared<Trace>();
+    REQUIRE(fixture.history.execute(traced(fixture.target.id(), "R2", "A", trace)));
     REQUIRE(fixture.history.undo());
-    control->allow_execute = false;
-    CHECK_FALSE(fixture.history.redo());
-    CHECK(fixture.history.is_dirty() == save_after_edit);
-    fixture.check_state("R1", "R9", false, true);
-    control->allow_execute = true;
-    REQUIRE(fixture.history.redo());
-    CHECK(fixture.history.is_dirty() == !save_after_edit);
+    trace->fail_execute = "A";
+
+    REQUIRE_THROWS_AS(fixture.history.redo(), std::logic_error);
+    fixture.check_names("R1", "R9");
+  }
+  SECTION("an undo whose target was removed outside the history") {
+    REQUIRE(fixture.rename(fixture.target.id(), "R2"));
+    REQUIRE(fixture.document.remove_component(fixture.target.id()).has_value());
+
+    REQUIRE_THROWS_AS(fixture.history.undo(), std::logic_error);
+    const auto *other = fixture.document.lookup(fixture.other.id());
+    REQUIRE(other != nullptr);
+    CHECK(other->designator() == "R9");
   }
 }
 
