@@ -14,6 +14,32 @@ template <typename Collection>
 bool contains_id(const Collection &objects, const Uuid &id) {
   return find_by_id(objects, id) != objects.end();
 }
+
+template <typename T>
+bool add_unique(std::vector<T> &vector, T object) {
+  auto it = find_by_id<std::vector<T>>(vector, object.id());
+
+  if (it != vector.end()) {
+    return false;
+  }
+
+  vector.push_back(std::move(object));
+  return true;
+}
+
+template <typename T>
+std::optional<T> remove_by_id(std::vector<T> &vector, const Uuid &id) {
+  auto it = find_by_id<std::vector<T>>(vector, id);
+
+  if (it == vector.end()) {
+    return std::nullopt;
+  }
+
+  auto removed = std::move(*it);
+  vector.erase(it);
+
+  return removed;
+}
 } // namespace
 
 ComponentInstance::ComponentInstance(Uuid id, std::string designator, Point position)
@@ -172,9 +198,9 @@ const std::vector<AnalysisSetup> &Document::analyses() const noexcept {
 }
 
 const ComponentInstance *Document::lookup(const Uuid &id) const {
-  for (const auto &s : sheets_) {
-    if (contains_id(s.components_, id)) {
-      const auto it = find_by_id(s.components_, id);
+  for (const auto &sheet : sheets_) {
+    if (contains_id(sheet.components_, id)) {
+      const auto it = find_by_id(sheet.components_, id);
       return &(*it);
     }
   }
@@ -182,18 +208,34 @@ const ComponentInstance *Document::lookup(const Uuid &id) const {
   return nullptr;
 }
 
-bool Document::add_component(const Uuid &sheet_id, ComponentInstance component) {
-  if (contains_uuid(component.id())) {
+template <typename T>
+bool Document::add(std::vector<T> Sheet::*member, const Uuid &sheet_id, T object) {
+  if (contains_uuid(object.id())) {
     return false;
   }
 
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
+  auto it = find_by_id(sheets_, sheet_id);
 
   if (it == sheets_.end()) {
     return false;
   }
 
-  return it->add_component(std::move(component));
+  return add_unique((*it).*member, std::move(object));
+}
+
+template <typename T>
+std::optional<T> Document::remove(std::vector<T> Sheet::*member, const Uuid &id) {
+  for (auto &sheet : sheets_) {
+    if (auto removed = remove_by_id(sheet.*member, id)) {
+      return removed;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool Document::add_component(const Uuid &sheet_id, ComponentInstance component) {
+  return add(&Sheet::components_, sheet_id, std::move(component));
 }
 
 bool Document::rename_component(const Uuid &id, std::string designator) {
@@ -207,145 +249,47 @@ bool Document::rename_component(const Uuid &id, std::string designator) {
 }
 
 std::optional<ComponentInstance> Document::remove_component(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_component(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::components_, id);
 }
 
 bool Document::add_wire(const Uuid &sheet_id, Wire wire) {
-  if (contains_uuid(wire.id())) {
-    return false;
-  }
-
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
-
-  if (it == sheets_.end()) {
-    return false;
-  }
-
-  return it->add_wire(std::move(wire));
+  return add(&Sheet::wires_, sheet_id, std::move(wire));
 }
 
 std::optional<Wire> Document::remove_wire(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_wire(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::wires_, id);
 }
 
 bool Document::add_junction(const Uuid &sheet_id, Junction junction) {
-  if (contains_uuid(junction.id())) {
-    return false;
-  }
-
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
-
-  if (it == sheets_.end()) {
-    return false;
-  }
-
-  return it->add_junction(std::move(junction));
+  return add(&Sheet::junctions_, sheet_id, std::move(junction));
 }
 
 std::optional<Junction> Document::remove_junction(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_junction(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::junctions_, id);
 }
 
 bool Document::add_label(const Uuid &sheet_id, NetLabel label) {
-  if (contains_uuid(label.id())) {
-    return false;
-  }
-
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
-
-  if (it == sheets_.end()) {
-    return false;
-  }
-
-  return it->add_label(std::move(label));
+  return add(&Sheet::labels_, sheet_id, std::move(label));
 }
 
 std::optional<NetLabel> Document::remove_label(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_label(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::labels_, id);
 }
 
 bool Document::add_directive(const Uuid &sheet_id, Directive directive) {
-  if (contains_uuid(directive.id())) {
-    return false;
-  }
-
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
-
-  if (it == sheets_.end()) {
-    return false;
-  }
-
-  return it->add_directive(std::move(directive));
+  return add(&Sheet::directives_, sheet_id, std::move(directive));
 }
 
 std::optional<Directive> Document::remove_directive(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_directive(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::directives_, id);
 }
 
 bool Document::add_probe(const Uuid &sheet_id, Probe probe) {
-  if (contains_uuid(probe.id())) {
-    return false;
-  }
-
-  auto it = find_by_id<std::vector<Sheet>>(sheets_, sheet_id);
-
-  if (it == sheets_.end()) {
-    return false;
-  }
-
-  return it->add_probe(std::move(probe));
+  return add(&Sheet::probes_, sheet_id, std::move(probe));
 }
 
 std::optional<Probe> Document::remove_probe(const Uuid &id) {
-  for (auto &s : sheets_) {
-    auto c = s.remove_probe(id);
-
-    if (c != std::nullopt) {
-      return c;
-    }
-  }
-
-  return std::nullopt;
+  return remove(&Sheet::probes_, id);
 }
 
 bool Document::add_analysis(AnalysisSetup analysis) {
@@ -353,27 +297,11 @@ bool Document::add_analysis(AnalysisSetup analysis) {
     return false;
   }
 
-  auto it = find_by_id<std::vector<AnalysisSetup>>(analyses_, analysis.id());
-
-  if (it != analyses_.end()) {
-    return false;
-  }
-
-  analyses_.push_back(std::move(analysis));
-  return true;
+  return add_unique(analyses_, analysis);
 }
 
 std::optional<AnalysisSetup> Document::remove_analysis(const Uuid &id) {
-  auto it = find_by_id<std::vector<AnalysisSetup>>(analyses_, id);
-
-  if (it == analyses_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  analyses_.erase(it);
-
-  return removed;
+  return remove_by_id(analyses_, id);
 }
 
 bool Document::contains_uuid(const Uuid &id) const {
@@ -421,28 +349,10 @@ const std::vector<Probe> &Sheet::probes() const noexcept {
   return probes_;
 }
 
-bool Sheet::add_component(ComponentInstance component) {
-  auto it = find_by_id<std::vector<ComponentInstance>>(components_, component.id());
-
-  if (it != components_.end()) {
-    return false;
-  }
-
-  components_.push_back(std::move(component));
-  return true;
-}
-
-std::optional<ComponentInstance> Sheet::remove_component(const Uuid &id) {
-  auto it = find_by_id<std::vector<ComponentInstance>>(components_, id);
-
-  if (it == components_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  components_.erase(it);
-
-  return removed;
+bool Sheet::contains_uuid(const Uuid &id) const {
+  return id_ == id || contains_id(components_, id) || contains_id(wires_, id) ||
+    contains_id(junctions_, id) || contains_id(labels_, id) || contains_id(directives_, id) ||
+    contains_id(probes_, id);
 }
 
 bool Sheet::rename_component(const Uuid &id, std::string designator) {
@@ -456,129 +366,4 @@ bool Sheet::rename_component(const Uuid &id, std::string designator) {
   return true;
 }
 
-bool Sheet::add_wire(Wire wire) {
-  auto it = find_by_id<std::vector<Wire>>(wires_, wire.id());
-
-  if (it != wires_.end()) {
-    return false;
-  }
-
-  wires_.push_back(std::move(wire));
-  return true;
-}
-
-std::optional<Wire> Sheet::remove_wire(const Uuid &id) {
-  auto it = find_by_id<std::vector<Wire>>(wires_, id);
-
-  if (it == wires_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  wires_.erase(it);
-
-  return removed;
-}
-
-bool Sheet::add_junction(Junction junction) {
-  auto it = find_by_id<std::vector<Junction>>(junctions_, junction.id());
-
-  if (it != junctions_.end()) {
-    return false;
-  }
-
-  junctions_.push_back(std::move(junction));
-  return true;
-}
-
-std::optional<Junction> Sheet::remove_junction(const Uuid &id) {
-  auto it = find_by_id<std::vector<Junction>>(junctions_, id);
-
-  if (it == junctions_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  junctions_.erase(it);
-
-  return removed;
-}
-
-bool Sheet::add_label(NetLabel label) {
-  auto it = find_by_id<std::vector<NetLabel>>(labels_, label.id());
-
-  if (it != labels_.end()) {
-    return false;
-  }
-
-  labels_.push_back(std::move(label));
-  return true;
-}
-
-std::optional<NetLabel> Sheet::remove_label(const Uuid &id) {
-  auto it = find_by_id<std::vector<NetLabel>>(labels_, id);
-
-  if (it == labels_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  labels_.erase(it);
-
-  return removed;
-}
-
-bool Sheet::add_directive(Directive directive) {
-  auto it = find_by_id<std::vector<Directive>>(directives_, directive.id());
-
-  if (it != directives_.end()) {
-    return false;
-  }
-
-  directives_.push_back(std::move(directive));
-  return true;
-}
-
-std::optional<Directive> Sheet::remove_directive(const Uuid &id) {
-  auto it = find_by_id<std::vector<Directive>>(directives_, id);
-
-  if (it == directives_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  directives_.erase(it);
-
-  return removed;
-}
-
-bool Sheet::add_probe(Probe probe) {
-  auto it = find_by_id<std::vector<Probe>>(probes_, probe.id());
-
-  if (it != probes_.end()) {
-    return false;
-  }
-
-  probes_.push_back(std::move(probe));
-  return true;
-}
-
-std::optional<Probe> Sheet::remove_probe(const Uuid &id) {
-  auto it = find_by_id<std::vector<Probe>>(probes_, id);
-
-  if (it == probes_.end()) {
-    return std::nullopt;
-  }
-
-  auto removed = std::move(*it);
-  probes_.erase(it);
-
-  return removed;
-}
-
-bool Sheet::contains_uuid(const Uuid &id) const {
-  return id_ == id || contains_id(components_, id) || contains_id(wires_, id) ||
-    contains_id(junctions_, id) || contains_id(labels_, id) || contains_id(directives_, id) ||
-    contains_id(probes_, id);
-}
 } // namespace ygn::spice::core

@@ -103,6 +103,26 @@ template <typename T>
 concept HasReadOnlyProbes =
   requires(T &object) { requires ReadOnlyRangeOf<decltype(object.probes()), Probe>; };
 
+// A sheet is edited only through its document, which keeps UUIDs unique across
+// every sheet: objects are added, removed and renamed there.
+template <typename T>
+concept HasPublicSheetEditors =
+  requires(T &sheet, ComponentInstance component) { sheet.add_component(component); } ||
+  requires(T &sheet, Wire wire) { sheet.add_wire(wire); } ||
+  requires(T &sheet, Junction junction) { sheet.add_junction(junction); } ||
+  requires(T &sheet, NetLabel label) { sheet.add_label(label); } ||
+  requires(T &sheet, Directive directive) { sheet.add_directive(directive); } ||
+  requires(T &sheet, Probe probe) { sheet.add_probe(probe); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_component(id); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_wire(id); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_junction(id); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_label(id); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_directive(id); } ||
+  requires(T &sheet, const Uuid &id) { sheet.remove_probe(id); } ||
+  requires(T &sheet, const Uuid &id, std::string designator) {
+    sheet.rename_component(id, designator);
+  };
+
 static_assert(std::is_aggregate_v<Point>);
 
 static_assert(!std::is_aggregate_v<ComponentInstance>);
@@ -162,6 +182,7 @@ static_assert(HasReadOnlyJunctions<Sheet>);
 static_assert(HasReadOnlyLabels<Sheet>);
 static_assert(HasReadOnlyDirectives<Sheet>);
 static_assert(HasReadOnlyProbes<Sheet>);
+static_assert(!HasPublicSheetEditors<Sheet>);
 
 static_assert(!std::is_default_constructible_v<ComponentInstance>);
 static_assert(!std::is_default_constructible_v<Wire>);

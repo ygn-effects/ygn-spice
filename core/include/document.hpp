@@ -155,21 +155,6 @@ public:
   const std::vector<Directive> &directives() const noexcept;
   const std::vector<Probe> &probes() const noexcept;
 
-  bool add_component(ComponentInstance component);
-  std::optional<ComponentInstance> remove_component(const Uuid &id);
-  bool rename_component(const Uuid &id, std::string designator);
-
-  bool add_wire(Wire wire);
-  std::optional<Wire> remove_wire(const Uuid &id);
-  bool add_junction(Junction junction);
-  std::optional<Junction> remove_junction(const Uuid &id);
-  bool add_label(NetLabel label);
-  std::optional<NetLabel> remove_label(const Uuid &id);
-  bool add_directive(Directive directive);
-  std::optional<Directive> remove_directive(const Uuid &id);
-  bool add_probe(Probe probe);
-  std::optional<Probe> remove_probe(const Uuid &id);
-
 private:
   Uuid id_ = Uuid::random();
   std::string name_ = "New sheet";
@@ -182,6 +167,8 @@ private:
   std::vector<Probe> probes_;
 
   bool contains_uuid(const Uuid &id) const;
+
+  bool rename_component(const Uuid &id, std::string designator);
 
   friend class Document;
 };
@@ -222,6 +209,12 @@ private:
   std::vector<AnalysisSetup> analyses_;
 
   bool contains_uuid(const Uuid &id) const;
+
+  template <typename T>
+  bool add(std::vector<T> Sheet::*member, const Uuid &sheet_id, T object);
+
+  template <typename T>
+  std::optional<T> remove(std::vector<T> Sheet::*member, const Uuid &id);
 };
 
 } // namespace ygn::spice::core

@@ -1,13 +1,17 @@
 // Keep the public header first so this test also verifies that it is self-contained.
 #include "connectivity.hpp"
 
+#include "document.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <optional>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -17,6 +21,7 @@ using ygn::spice::core::ComponentInstance;
 using ygn::spice::core::ConnectionRef;
 using ygn::spice::core::Coordinate;
 using ygn::spice::core::directly_connected;
+using ygn::spice::core::Document;
 using ygn::spice::core::Junction;
 using ygn::spice::core::Net;
 using ygn::spice::core::NetLabel;
@@ -38,41 +43,78 @@ Point point(const Coordinate::rep x, const Coordinate::rep y) {
   };
 }
 
+// Sheets are only edited through their document, which keeps UUIDs unique
+// across the whole document. Each test sheet therefore lives in its own
+// document, and connectivity is analyzed on a read-only view of it.
+class DocumentSheet {
+public:
+  bool add_wire(Wire wire) {
+    return document_.add_wire(id(), std::move(wire));
+  }
+
+  bool add_junction(Junction junction) {
+    return document_.add_junction(id(), std::move(junction));
+  }
+
+  bool add_label(NetLabel label) {
+    return document_.add_label(id(), std::move(label));
+  }
+
+  bool add_component(ComponentInstance component) {
+    return document_.add_component(id(), std::move(component));
+  }
+
+  std::optional<Junction> remove_junction(const Uuid &junction_id) {
+    return document_.remove_junction(junction_id);
+  }
+
+  const Sheet &view() const {
+    return document_.sheets().front();
+  }
+
+private:
+  Document document_;
+
+  const Uuid &id() const {
+    return view().id();
+  }
+};
+
 TEST_CASE("wire endpoints at the same coordinate are connected") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto first_id = uuid("10000000-0000-0000-0000-000000000001");
   const auto second_id = uuid("10000000-0000-0000-0000-000000000002");
 
   REQUIRE(sheet.add_wire(Wire(first_id, std::array{point(0, 0), point(10, 0)})));
   REQUIRE(sheet.add_wire(Wire(second_id, std::array{point(10, 0), point(20, 0)})));
 
-  const auto connectivity = analyze_connectivity(sheet);
+  const auto connectivity = analyze_connectivity(sheet.view());
 
   CHECK(connectivity.are_connected(ConnectionRef::wire(first_id), ConnectionRef::wire(second_id)));
 }
 
 TEST_CASE("a wire endpoint on another wire forms a T junction") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto trunk_id = uuid("20000000-0000-0000-0000-000000000001");
   const auto branch_id = uuid("20000000-0000-0000-0000-000000000002");
 
   REQUIRE(sheet.add_wire(Wire(trunk_id, std::array{point(0, 0), point(20, 0)})));
   REQUIRE(sheet.add_wire(Wire(branch_id, std::array{point(10, 0), point(10, 10)})));
 
-  const auto connectivity = analyze_connectivity(sheet);
+  const auto connectivity = analyze_connectivity(sheet.view());
 
   CHECK(connectivity.are_connected(ConnectionRef::wire(trunk_id), ConnectionRef::wire(branch_id)));
 }
 
 TEST_CASE("crossing wire interiors remain electrically separate") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto horizontal_id = uuid("30000000-0000-0000-0000-000000000001");
   const auto vertical_id = uuid("30000000-0000-0000-0000-000000000002");
 
   REQUIRE(sheet.add_wire(Wire(horizontal_id, std::array{point(-10, 0), point(10, 0)})));
   REQUIRE(sheet.add_wire(Wire(vertical_id, std::array{point(0, -10), point(0, 10)})));
 
-  const auto connectivity = analyze_connectivity(sheet);
+  const auto connectivity = analyze_connectivity(sheet.view());
 
   CHECK_FALSE(connectivity.are_connected(
     ConnectionRef::wire(horizontal_id),
@@ -80,7 +122,7 @@ TEST_CASE("crossing wire interiors remain electrically separate") {
 }
 
 TEST_CASE("an explicit junction connects crossing wire interiors") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto horizontal_id = uuid("40000000-0000-0000-0000-000000000001");
   const auto vertical_id = uuid("40000000-0000-0000-0000-000000000002");
   const auto junction_id = uuid("40000000-0000-0000-0000-000000000003");
@@ -89,7 +131,7 @@ TEST_CASE("an explicit junction connects crossing wire interiors") {
   REQUIRE(sheet.add_wire(Wire(vertical_id, std::array{point(0, -10), point(0, 10)})));
   REQUIRE(sheet.add_junction(Junction(junction_id, point(0, 0))));
 
-  const auto connectivity = analyze_connectivity(sheet);
+  const auto connectivity = analyze_connectivity(sheet.view());
 
   CHECK(connectivity.are_connected(
     ConnectionRef::wire(horizontal_id),
@@ -103,7 +145,7 @@ TEST_CASE("an explicit junction connects crossing wire interiors") {
 }
 
 TEST_CASE("equal net labels connect separate physical groups using exact text") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto first_wire_id = uuid("50000000-0000-0000-0000-000000000001");
   const auto second_wire_id = uuid("50000000-0000-0000-0000-000000000002");
   const auto third_wire_id = uuid("50000000-0000-0000-0000-000000000003");
@@ -118,7 +160,7 @@ TEST_CASE("equal net labels connect separate physical groups using exact text") 
   REQUIRE(sheet.add_label(NetLabel(second_label_id, "signal", point(105, 0))));
   REQUIRE(sheet.add_label(NetLabel(third_label_id, "Signal", point(205, 0))));
 
-  const auto connectivity = analyze_connectivity(sheet);
+  const auto connectivity = analyze_connectivity(sheet.view());
 
   CHECK(connectivity.are_connected(
     ConnectionRef::wire(first_wire_id),
@@ -138,7 +180,7 @@ TEST_CASE("equal net labels connect separate physical groups using exact text") 
 }
 
 TEST_CASE("blank labels attach geometrically without merging by name", "[blank-labels]") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto first_wire = Wire::create(std::array{point(0, 0), point(20, 0)});
   const auto second_wire = Wire::create(std::array{point(100, 0), point(120, 0)});
   const auto first_label = NetLabel::create("", point(5, 0));
@@ -150,7 +192,7 @@ TEST_CASE("blank labels attach geometrically without merging by name", "[blank-l
   REQUIRE(sheet.add_label(same_wire_label));
   REQUIRE(sheet.add_label(remote_label));
 
-  auto connectivity = analyze_connectivity(sheet);
+  auto connectivity = analyze_connectivity(sheet.view());
   const auto first = ConnectionRef::label(first_label.id());
   const auto same_wire = ConnectionRef::label(same_wire_label.id());
   const auto remote = ConnectionRef::label(remote_label.id());
@@ -170,13 +212,13 @@ TEST_CASE("blank labels attach geometrically without merging by name", "[blank-l
 TEST_CASE("blank labels without wires remain isolated", "[blank-labels]") {
   for (const bool coincident : {false, true}) {
     CAPTURE(coincident);
-    Sheet sheet;
+    DocumentSheet sheet;
     const auto first_label = NetLabel::create("", point(0, 0));
     const auto second_label = NetLabel::create("", coincident ? point(0, 0) : point(100, 0));
     REQUIRE(sheet.add_label(first_label));
     REQUIRE(sheet.add_label(second_label));
 
-    auto connectivity = analyze_connectivity(sheet);
+    auto connectivity = analyze_connectivity(sheet.view());
     const auto first = ConnectionRef::label(first_label.id());
     const auto second = ConnectionRef::label(second_label.id());
     CHECK(connectivity.are_connected(first, first));
@@ -188,15 +230,17 @@ TEST_CASE("blank labels without wires remain isolated", "[blank-labels]") {
 }
 
 TEST_CASE("net labels are scoped to the sheet being analyzed") {
-  Sheet first_sheet;
-  Sheet second_sheet;
+  // A document has a single sheet until hierarchy exists, so a second document
+  // stands in for another sheet.
+  DocumentSheet first_sheet;
+  DocumentSheet second_sheet;
   const auto first_label_id = uuid("51000000-0000-0000-0000-000000000001");
   const auto second_label_id = uuid("51000000-0000-0000-0000-000000000002");
 
   REQUIRE(first_sheet.add_label(NetLabel(first_label_id, "signal", point(0, 0))));
   REQUIRE(second_sheet.add_label(NetLabel(second_label_id, "signal", point(0, 0))));
 
-  const auto connectivity = analyze_connectivity(first_sheet);
+  const auto connectivity = analyze_connectivity(first_sheet.view());
 
   CHECK_FALSE(connectivity.are_connected(
     ConnectionRef::label(first_label_id),
@@ -204,7 +248,7 @@ TEST_CASE("net labels are scoped to the sheet being analyzed") {
 }
 
 TEST_CASE("resolved component pins participate without embedding library data") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto first_component_id = uuid("60000000-0000-0000-0000-000000000001");
   const auto second_component_id = uuid("60000000-0000-0000-0000-000000000002");
   const auto shared_library_pin_id = uuid("60000000-0000-0000-0000-000000000003");
@@ -226,7 +270,7 @@ TEST_CASE("resolved component pins participate without embedding library data") 
       .position = point(100, 0),
     },
   };
-  const auto connectivity = analyze_connectivity(sheet, resolved_pins);
+  const auto connectivity = analyze_connectivity(sheet.view(), resolved_pins);
 
   CHECK(connectivity.are_connected(
     ConnectionRef::pin(first_component_id, shared_library_pin_id),
@@ -237,7 +281,7 @@ TEST_CASE("resolved component pins participate without embedding library data") 
 }
 
 TEST_CASE("connectivity is an immutable snapshot of document topology") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto horizontal_id = uuid("70000000-0000-0000-0000-000000000001");
   const auto vertical_id = uuid("70000000-0000-0000-0000-000000000002");
   const auto junction_id = uuid("70000000-0000-0000-0000-000000000003");
@@ -246,9 +290,9 @@ TEST_CASE("connectivity is an immutable snapshot of document topology") {
   REQUIRE(sheet.add_wire(Wire(vertical_id, std::array{point(0, -10), point(0, 10)})));
   REQUIRE(sheet.add_junction(Junction(junction_id, point(0, 0))));
 
-  const auto before_removal = analyze_connectivity(sheet);
+  const auto before_removal = analyze_connectivity(sheet.view());
   REQUIRE(sheet.remove_junction(junction_id).has_value());
-  const auto after_removal = analyze_connectivity(sheet);
+  const auto after_removal = analyze_connectivity(sheet.view());
 
   CHECK(before_removal.are_connected(
     ConnectionRef::wire(horizontal_id),
@@ -266,18 +310,18 @@ TEST_CASE("connectivity output is deterministic across insertion order") {
   const Wire second_wire(second_wire_id, std::array{point(10, 0), point(20, 0)});
   const Wire isolated_wire(isolated_wire_id, std::array{point(100, 0), point(110, 0)});
 
-  Sheet forward_sheet;
+  DocumentSheet forward_sheet;
   REQUIRE(forward_sheet.add_wire(first_wire));
   REQUIRE(forward_sheet.add_wire(second_wire));
   REQUIRE(forward_sheet.add_wire(isolated_wire));
 
-  Sheet reverse_sheet;
+  DocumentSheet reverse_sheet;
   REQUIRE(reverse_sheet.add_wire(isolated_wire));
   REQUIRE(reverse_sheet.add_wire(second_wire));
   REQUIRE(reverse_sheet.add_wire(first_wire));
 
-  auto forward = analyze_connectivity(forward_sheet);
-  auto reverse = analyze_connectivity(reverse_sheet);
+  auto forward = analyze_connectivity(forward_sheet.view());
+  auto reverse = analyze_connectivity(reverse_sheet.view());
 
   CHECK(forward.nets() == reverse.nets());
 }
@@ -293,7 +337,7 @@ TEST_CASE("point-on-segment checks support the full document coordinate scale") 
   for (const bool vertical : {false, true}) {
     for (const bool reverse : {false, true}) {
       CAPTURE(vertical, reverse);
-      Sheet sheet;
+      DocumentSheet sheet;
       const auto start = vertical ? point(0, minimum) : point(minimum, 0);
       const auto end = vertical ? point(0, maximum) : point(maximum, 0);
       const auto branch_end = vertical ? point(maximum, 0) : point(0, maximum);
@@ -301,7 +345,7 @@ TEST_CASE("point-on-segment checks support the full document coordinate scale") 
         sheet.add_wire(Wire(trunk_id, reverse ? std::array{end, start} : std::array{start, end})));
       REQUIRE(sheet.add_wire(Wire(branch_id, std::array{point(0, 0), branch_end})));
 
-      const auto connectivity = analyze_connectivity(sheet);
+      const auto connectivity = analyze_connectivity(sheet.view());
       CHECK(
         connectivity.are_connected(ConnectionRef::wire(trunk_id), ConnectionRef::wire(branch_id)));
     }
@@ -333,7 +377,7 @@ TEST_CASE("wire attachments respect segment bounds in either endpoint order", "[
       for (const auto *kind : {"wire", "junction", "label"}) {
         for (const auto &test : cases) {
           CAPTURE(vertical, reverse, kind, test.along, test.off_line, test.connected);
-          Sheet sheet;
+          DocumentSheet sheet;
           const auto wire_id = uuid("a0000000-0000-0000-0000-000000000001");
           const auto attachment_id = uuid("a0000000-0000-0000-0000-000000000002");
           const auto start = position(-20, 0);
@@ -357,7 +401,7 @@ TEST_CASE("wire attachments respect segment bounds in either endpoint order", "[
             return ConnectionRef::label(attachment_id);
           }();
 
-          auto connectivity = analyze_connectivity(sheet);
+          auto connectivity = analyze_connectivity(sheet.view());
           const auto wire_ref = ConnectionRef::wire(wire_id);
           CHECK(connectivity.are_connected(wire_ref, attachment) == test.connected);
           CHECK(connectivity.are_connected(attachment, wire_ref) == test.connected);
@@ -371,7 +415,7 @@ TEST_CASE("wire attachments respect segment bounds in either endpoint order", "[
 }
 
 TEST_CASE("unrelated junctions labels and resolved pins coexist safely", "[regression]") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto junction_id = uuid("a1000000-0000-0000-0000-000000000001");
   const auto label_id = uuid("a1000000-0000-0000-0000-000000000002");
   const auto component_id = uuid("a1000000-0000-0000-0000-000000000003");
@@ -382,7 +426,7 @@ TEST_CASE("unrelated junctions labels and resolved pins coexist safely", "[regre
   const std::array pins{ResolvedPin{component_id, pin_id, point(200, 200)}};
 
   // Analysis must complete even when every participant has a different kind.
-  auto connectivity = analyze_connectivity(sheet, pins);
+  auto connectivity = analyze_connectivity(sheet.view(), pins);
   const std::array refs{
     ConnectionRef::junction(junction_id),
     ConnectionRef::label(label_id),
@@ -398,7 +442,7 @@ TEST_CASE("unrelated junctions labels and resolved pins coexist safely", "[regre
 }
 
 TEST_CASE("junction and label connections compose into one net", "[regression]") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto horizontal = Wire::create(std::array{point(-20, 0), point(20, 0)});
   const auto vertical = Wire::create(std::array{point(0, -20), point(0, 20)});
   const auto remote = Wire::create(std::array{point(100, 0), point(120, 0)});
@@ -412,7 +456,7 @@ TEST_CASE("junction and label connections compose into one net", "[regression]")
   REQUIRE(sheet.add_label(local_label));
   REQUIRE(sheet.add_label(remote_label));
 
-  auto connectivity = analyze_connectivity(sheet);
+  auto connectivity = analyze_connectivity(sheet.view());
   const std::array refs{
     ConnectionRef::wire(horizontal.id()),
     ConnectionRef::wire(vertical.id()),
@@ -435,13 +479,13 @@ TEST_CASE("traversal retains isolated wires after a connected chain", "[regressi
   const auto middle = Wire::create(std::array{point(10, 0), point(20, 0)});
   const auto last = Wire::create(std::array{point(20, 0), point(30, 0)});
   const auto isolated = Wire::create(std::array{point(100, 100), point(110, 100)});
-  Sheet sheet;
+  DocumentSheet sheet;
   REQUIRE(sheet.add_wire(first));
   REQUIRE(sheet.add_wire(middle));
   REQUIRE(sheet.add_wire(last));
   REQUIRE(sheet.add_wire(isolated));
 
-  auto connectivity = analyze_connectivity(sheet);
+  auto connectivity = analyze_connectivity(sheet.view());
   const auto isolated_ref = ConnectionRef::wire(isolated.id());
   REQUIRE(connectivity.nets().size() == 2);
   CHECK(
@@ -483,7 +527,7 @@ TEST_CASE("pins attach only to wire endpoints in either argument order", "[pin-r
     for (const bool reverse : {false, true}) {
       for (const auto &test : cases) {
         CAPTURE(vertical, reverse, test.along, test.off_line, test.connected);
-        Sheet sheet;
+        DocumentSheet sheet;
         const auto start = position(-20, 0);
         const auto end = position(20, 0);
         const auto wire = Wire::create(reverse ? std::array{end, start} : std::array{start, end});
@@ -502,7 +546,7 @@ TEST_CASE("pins attach only to wire endpoints in either argument order", "[pin-r
         CHECK(directly_connected(wire_participant, pin_participant) == test.connected);
         CHECK(directly_connected(pin_participant, wire_participant) == test.connected);
 
-        auto connectivity = analyze_connectivity(sheet, pins);
+        auto connectivity = analyze_connectivity(sheet.view(), pins);
         CHECK(connectivity.are_connected(wire_ref, pin_ref) == test.connected);
         CHECK(connectivity.are_connected(pin_ref, wire_ref) == test.connected);
         CHECK(connectivity.nets().size() == (test.connected ? 1 : 2));
@@ -521,7 +565,7 @@ TEST_CASE("pins attach only to wire endpoints in either argument order", "[pin-r
 TEST_CASE("coincident point participants need a wire except for matching labels", "[pin-rules]") {
   for (const bool matching_labels : {false, true}) {
     CAPTURE(matching_labels);
-    Sheet sheet;
+    DocumentSheet sheet;
     const auto position = point(10, 20);
     const auto first = ComponentInstance::create("R1", position);
     const auto second = ComponentInstance::create("R2", position);
@@ -552,7 +596,7 @@ TEST_CASE("coincident point participants need a wire except for matching labels"
       ConnectionRef::label(second_label.id()),
     };
 
-    auto connectivity = analyze_connectivity(sheet, pins);
+    auto connectivity = analyze_connectivity(sheet.view(), pins);
     CHECK(connectivity.nets().size() == refs.size() - (matching_labels ? 1 : 0));
     for (std::size_t i = 0; i < refs.size(); ++i) {
       for (std::size_t j = 0; j < refs.size(); ++j) {
@@ -567,7 +611,7 @@ TEST_CASE("coincident point participants need a wire except for matching labels"
 }
 
 TEST_CASE("a junction and label on wire interiors do not attach a coincident pin", "[pin-rules]") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto horizontal = Wire::create(std::array{point(-20, 0), point(20, 0)});
   const auto vertical = Wire::create(std::array{point(0, -20), point(0, 20)});
   const auto junction = Junction::create(point(0, 0));
@@ -588,7 +632,7 @@ TEST_CASE("a junction and label on wire interiors do not attach a coincident pin
     ConnectionRef::label(label.id()),
   };
 
-  auto connectivity = analyze_connectivity(sheet, pins);
+  auto connectivity = analyze_connectivity(sheet.view(), pins);
   CHECK(connectivity.nets().size() == 2);
   CHECK(connectivity.are_connected(pin_ref, pin_ref));
   for (const auto &ref : connected_refs) {
@@ -600,7 +644,7 @@ TEST_CASE("a junction and label on wire interiors do not attach a coincident pin
 
 TEST_CASE(
   "wire endpoints connect pins indirectly to other pins labels and junctions", "[pin-rules]") {
-  Sheet sheet;
+  DocumentSheet sheet;
   const auto wire = Wire::create(std::array{point(0, 0), point(20, 0)});
   const auto first = ComponentInstance::create("R1", point(0, 0));
   const auto second = ComponentInstance::create("R2", point(20, 0));
@@ -624,7 +668,7 @@ TEST_CASE(
     ConnectionRef::label(label.id()),
   };
 
-  auto connectivity = analyze_connectivity(sheet, pins);
+  auto connectivity = analyze_connectivity(sheet.view(), pins);
   CHECK(connectivity.nets().size() == 1);
   for (std::size_t i = 0; i < refs.size(); ++i) {
     for (std::size_t j = 0; j < refs.size(); ++j) {
@@ -683,7 +727,7 @@ TEST_CASE("net comparisons handle empty values prefixes and unequal lengths", "[
       ordered.emplace_back();
       continue;
     }
-    Sheet sheet;
+    DocumentSheet sheet;
     std::vector<ConnectionRef> expected;
     for (const auto index : sequence) {
       expected.push_back(ConnectionRef::wire(wires[index].id()));
@@ -691,7 +735,7 @@ TEST_CASE("net comparisons handle empty values prefixes and unequal lengths", "[
     for (auto it = sequence.rbegin(); it != sequence.rend(); ++it) {
       REQUIRE(sheet.add_wire(wires[*it]));
     }
-    const auto connectivity = analyze_connectivity(sheet);
+    const auto connectivity = analyze_connectivity(sheet.view());
     REQUIRE(connectivity.nets().size() == 1);
     REQUIRE(connectivity.nets().front().connections() == expected);
     ordered.push_back(connectivity.nets().front());
@@ -769,7 +813,7 @@ TEST_CASE("mixed connectivity is deterministic across participant permutations",
       std::shuffle(components.begin(), components.end(), random);
       std::shuffle(pins.begin(), pins.end(), random);
     }
-    Sheet sheet;
+    DocumentSheet sheet;
     for (const auto &wire : wires) {
       auto endpoints = wire.points();
       if (trial % 2 != 0) {
@@ -786,7 +830,7 @@ TEST_CASE("mixed connectivity is deterministic across participant permutations",
     for (const auto &component : components) {
       REQUIRE(sheet.add_component(component));
     }
-    auto connectivity = analyze_connectivity(sheet, pins);
+    auto connectivity = analyze_connectivity(sheet.view(), pins);
     REQUIRE(connectivity.nets().size() == groups.size());
     if (trial == 0) {
       baseline = connectivity.nets();
