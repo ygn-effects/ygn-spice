@@ -314,9 +314,6 @@ bool Document::contains_uuid(const Uuid &id) const {
   });
 }
 
-Sheet::Sheet() {
-}
-
 const Uuid &Sheet::id() const noexcept {
   return id_;
 }

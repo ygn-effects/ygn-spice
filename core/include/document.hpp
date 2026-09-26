@@ -143,7 +143,7 @@ private:
 
 class Sheet {
 public:
-  Sheet();
+  Sheet() = default;
 
   const Uuid &id() const noexcept;
   const std::string &name() const noexcept;

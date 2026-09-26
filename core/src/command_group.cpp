@@ -3,7 +3,7 @@
 namespace ygn::spice::core {
 
 CommandGroup::CommandGroup(std::vector<std::unique_ptr<Command>> commands)
-    : commands_(std::move(commands)), exec_(0) {
+    : commands_(std::move(commands)) {
 }
 
 CommandResult CommandGroup::execute(Document &doc) {

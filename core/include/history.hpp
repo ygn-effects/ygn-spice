@@ -12,7 +12,7 @@ namespace ygn::spice::core {
 
 class CommandHistory {
 public:
-  CommandHistory(Document &doc);
+  explicit CommandHistory(Document &doc);
 
   bool can_undo() const;
   bool can_redo() const;
@@ -26,8 +26,8 @@ public:
 
 private:
   Document &document_;
-  std::optional<std::size_t> saved_cursor_;
-  std::size_t cursor_;
+  std::optional<std::size_t> saved_cursor_ = 0;
+  std::size_t cursor_ = 0;
   std::vector<std::unique_ptr<Command>> history_;
 };
 

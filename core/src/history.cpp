@@ -1,7 +1,7 @@
 #include "history.hpp"
 
 namespace ygn::spice::core {
-CommandHistory::CommandHistory(Document &doc) : document_(doc), saved_cursor_(0), cursor_(0) {
+CommandHistory::CommandHistory(Document &doc) : document_(doc) {
 }
 
 bool CommandHistory::can_redo() const {
