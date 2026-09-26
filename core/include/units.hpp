@@ -23,6 +23,6 @@ private:
 
   rep rep_;
 
-  static bool is_overflow(const rep &a, const rep &b);
+  static bool is_overflow(rep a, rep b);
 };
 } // namespace ygn::spice::core

@@ -19,7 +19,7 @@ public:
   static ConnectionRef label(const Uuid &id);
   static ConnectionRef pin(const Uuid &component_id, const Uuid &pin_id);
 
-  const ConnectionKind &kind() const;
+  ConnectionKind kind() const;
 
   friend auto operator<=>(const ConnectionRef &self, const ConnectionRef &other) = default;
 

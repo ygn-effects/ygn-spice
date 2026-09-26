@@ -21,7 +21,7 @@ ConnectionRef ConnectionRef::pin(const Uuid &component_id, const Uuid &pin_id) {
   return ConnectionRef(ConnectionKind::pin, pin_id, component_id);
 }
 
-const ConnectionKind &ConnectionRef::kind() const {
+ConnectionKind ConnectionRef::kind() const {
   return kind_;
 }
 
@@ -181,13 +181,13 @@ bool directly_connected(const Participant &a, const Participant &b) {
     (a.ref.kind() == ConnectionKind::wire && b.ref.kind() == ConnectionKind::junction) ||
     (a.ref.kind() == ConnectionKind::junction && b.ref.kind() == ConnectionKind::wire)) {
     if (a.ref.kind() == ConnectionKind::wire) {
-      Segment s_a = std::get<Segment>(a.geometry);
-      Point p_b = std::get<Point>(b.geometry);
+      const Segment &s_a = std::get<Segment>(a.geometry);
+      const Point &p_b = std::get<Point>(b.geometry);
 
       return segment_contains_point(s_a, p_b);
     } else {
-      Point p_a = std::get<Point>(a.geometry);
-      Segment s_b = std::get<Segment>(b.geometry);
+      const Point &p_a = std::get<Point>(a.geometry);
+      const Segment &s_b = std::get<Segment>(b.geometry);
 
       return segment_contains_point(s_b, p_a);
     }
@@ -197,21 +197,21 @@ bool directly_connected(const Participant &a, const Participant &b) {
     (a.ref.kind() == ConnectionKind::wire && b.ref.kind() == ConnectionKind::label) ||
     (a.ref.kind() == ConnectionKind::label && b.ref.kind() == ConnectionKind::wire)) {
     if (a.ref.kind() == ConnectionKind::wire) {
-      Segment s_a = std::get<Segment>(a.geometry);
-      LabelData l_b = std::get<LabelData>(b.geometry);
+      const Segment &s_a = std::get<Segment>(a.geometry);
+      const LabelData &l_b = std::get<LabelData>(b.geometry);
 
       return segment_contains_point(s_a, l_b.position);
     } else {
-      LabelData l_a = std::get<LabelData>(a.geometry);
-      Segment s_b = std::get<Segment>(b.geometry);
+      const LabelData &l_a = std::get<LabelData>(a.geometry);
+      const Segment &s_b = std::get<Segment>(b.geometry);
 
       return segment_contains_point(s_b, l_a.position);
     }
   }
 
   if (a.ref.kind() == ConnectionKind::label && b.ref.kind() == ConnectionKind::label) {
-    LabelData l_a = std::get<LabelData>(a.geometry);
-    LabelData l_b = std::get<LabelData>(b.geometry);
+    const LabelData &l_a = std::get<LabelData>(a.geometry);
+    const LabelData &l_b = std::get<LabelData>(b.geometry);
 
     if (l_a.text.empty() && l_b.text.empty()) {
       return false;
@@ -226,13 +226,13 @@ bool directly_connected(const Participant &a, const Participant &b) {
     (a.ref.kind() == ConnectionKind::wire && b.ref.kind() == ConnectionKind::pin) ||
     (a.ref.kind() == ConnectionKind::pin && b.ref.kind() == ConnectionKind::wire)) {
     if (a.ref.kind() == ConnectionKind::wire) {
-      Segment s_a = std::get<Segment>(a.geometry);
-      Point p_b = std::get<Point>(b.geometry);
+      const Segment &s_a = std::get<Segment>(a.geometry);
+      const Point &p_b = std::get<Point>(b.geometry);
 
       return segment_edges_contains_point(s_a, p_b);
     } else {
-      Point p_a = std::get<Point>(a.geometry);
-      Segment s_b = std::get<Segment>(b.geometry);
+      const Point &p_a = std::get<Point>(a.geometry);
+      const Segment &s_b = std::get<Segment>(b.geometry);
 
       return segment_edges_contains_point(s_b, p_a);
     }

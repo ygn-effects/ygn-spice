@@ -116,7 +116,7 @@ public:
   static Probe create(ProbeKind kind);
 
   const Uuid &id() const noexcept;
-  const ProbeKind &kind() const noexcept;
+  ProbeKind kind() const noexcept;
 
 private:
   Uuid id_;

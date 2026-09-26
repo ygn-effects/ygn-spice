@@ -159,7 +159,7 @@ const Uuid &Probe::id() const noexcept {
   return id_;
 }
 
-const ProbeKind &Probe::kind() const noexcept {
+ProbeKind Probe::kind() const noexcept {
   return kind_;
 }
 

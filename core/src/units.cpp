@@ -56,7 +56,7 @@ Coordinate::rep Coordinate::nanometres() const {
   return rep_;
 }
 
-bool Coordinate::is_overflow(const rep &a, const rep &b) {
+bool Coordinate::is_overflow(rep a, rep b) {
   if (b != 0 && a > std::numeric_limits<rep>::max() / b) {
     return true;
   }
