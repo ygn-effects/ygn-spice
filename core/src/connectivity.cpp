@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <queue>
-#include <unordered_set>
 
 #include "connectivity.hpp"
 
@@ -38,7 +37,7 @@ const std::vector<ConnectionRef> &Net::connections() const {
 }
 
 bool Net::contains_ref(const ConnectionRef &ref) const {
-  return std::find(connections_.begin(), connections_.end(), ref) != connections_.end();
+  return std::ranges::binary_search(connections_, ref);
 }
 
 void Net::insert_ref(ConnectionRef ref) {
@@ -75,80 +74,60 @@ Connectivity analyze_connectivity(const Sheet &sheet, std::span<const ResolvedPi
   Connectivity con;
 
   std::vector<Participant> vertices;
-  std::vector<std::vector<size_t>> adjacency;
 
   for (const auto &w : sheet.wires()) {
     vertices.emplace_back(ConnectionRef::wire(w.id()), w.points());
-    adjacency.push_back({});
   }
 
   for (const auto &j : sheet.junctions()) {
     vertices.emplace_back(ConnectionRef::junction(j.id()), j.position());
-    adjacency.push_back({});
   }
 
   for (const auto &l : sheet.labels()) {
     vertices.emplace_back(ConnectionRef::label(l.id()), LabelData(l.position(), l.text()));
-    adjacency.push_back({});
   }
 
   for (const auto &p : pins) {
     vertices.emplace_back(ConnectionRef::pin(p.component_id, p.pin_id), p.position);
-    adjacency.push_back({});
   }
 
-  size_t i = 0;
+  std::vector<std::vector<std::size_t>> adjacency(vertices.size());
 
-  for (const auto &p1 : vertices) {
-    size_t j = 0;
-
-    for (const auto &p2 : vertices) {
-      if (p1.ref != p2.ref) {
-        if (directly_connected(p1, p2)) {
-          adjacency[i].push_back(j);
-        }
+  for (std::size_t i = 0; i < vertices.size(); i++) {
+    for (std::size_t j = i + 1; j < vertices.size(); j++) {
+      if (directly_connected(vertices[i], vertices[j])) {
+        adjacency[i].push_back(j);
+        adjacency[j].push_back(i);
       }
-
-      j++;
     }
-
-    i++;
   }
 
-  size_t k = 0;
-  std::unordered_set<size_t> visited;
-  std::queue<size_t> queue;
+  std::vector<bool> visited(vertices.size(), false);
+  std::queue<std::size_t> queue;
 
-  for (const auto &p : vertices) {
-    if (!visited.contains(k)) {
+  for (std::size_t k = 0; k < vertices.size(); k++) {
+    if (!visited[k]) {
       Net n;
 
-      n.insert_ref(p.ref);
-      visited.insert(k);
-
-      for (const auto &a : adjacency[k]) {
-        queue.push(a);
-        visited.insert(a);
-        n.insert_ref(vertices[a].ref);
-      }
+      visited[k] = true;
+      queue.push(k);
 
       while (!queue.empty()) {
-        size_t s = queue.front();
+        std::size_t s = queue.front();
+        n.insert_ref(vertices[s].ref);
         queue.pop();
 
         for (const auto &a : adjacency[s]) {
-          if (visited.insert(a).second) {
+          if (!visited[a]) {
+            visited[a] = true;
             queue.push(a);
-            n.insert_ref(vertices[a].ref);
           }
         }
       }
 
       n.sort_refs();
-      con.insert_net(n);
+      con.insert_net(std::move(n));
     }
-
-    k++;
   }
 
   con.sort_nets();

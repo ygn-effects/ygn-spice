@@ -7,14 +7,14 @@ CommandGroup::CommandGroup(std::vector<std::unique_ptr<Command>> commands)
 }
 
 CommandResult CommandGroup::execute(Document &doc) {
-  if (commands_.size() == 0) {
+  if (commands_.empty()) {
     return CommandResult::unchanged(CommandReason::NoChangeNeeded);
   }
 
   exec_ = 0;
 
   for (std::size_t i = exec_; i < commands_.size(); i++) {
-    CommandResult e = commands_.at(i)->execute(doc);
+    CommandResult e = commands_[i]->execute(doc);
 
     if (e.outcome() == CommandOutcome::Unchanged) {
       if (exec_ == 0) {
@@ -38,7 +38,7 @@ void CommandGroup::undo(Document &doc) {
   }
 
   for (std::size_t i = exec_; i > 0; i--) {
-    commands_.at(i - 1)->undo(doc);
+    commands_[i - 1]->undo(doc);
 
     exec_--;
   }

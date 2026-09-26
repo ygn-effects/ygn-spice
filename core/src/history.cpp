@@ -34,7 +34,7 @@ bool CommandHistory::undo() {
     return false;
   }
 
-  history_.at(cursor_ - 1)->undo(document_);
+  history_[cursor_ - 1]->undo(document_);
   cursor_--;
 
   return true;
@@ -45,7 +45,7 @@ bool CommandHistory::redo() {
     return false;
   }
 
-  if (history_.at(cursor_)->execute(document_)) {
+  if (history_[cursor_]->execute(document_)) {
     cursor_++;
 
     return true;
@@ -55,7 +55,7 @@ bool CommandHistory::redo() {
 }
 
 bool CommandHistory::is_dirty() const {
-  return !saved_cursor_.has_value() || saved_cursor_ != cursor_;
+  return saved_cursor_ != cursor_;
 }
 
 void CommandHistory::mark_saved() {

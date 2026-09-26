@@ -199,8 +199,9 @@ const std::vector<AnalysisSetup> &Document::analyses() const noexcept {
 
 const ComponentInstance *Document::lookup(const Uuid &id) const {
   for (const auto &sheet : sheets_) {
-    if (contains_id(sheet.components_, id)) {
-      const auto it = find_by_id(sheet.components_, id);
+    const auto it = find_by_id(sheet.components_, id);
+
+    if (it != sheet.components_.end()) {
       return &(*it);
     }
   }
@@ -297,7 +298,7 @@ bool Document::add_analysis(AnalysisSetup analysis) {
     return false;
   }
 
-  return add_unique(analyses_, analysis);
+  return add_unique(analyses_, std::move(analysis));
 }
 
 std::optional<AnalysisSetup> Document::remove_analysis(const Uuid &id) {
